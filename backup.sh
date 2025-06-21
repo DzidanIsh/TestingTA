@@ -168,18 +168,19 @@ fi
 
 # Backup Git ke server monitoring
 info_msg "Melakukan push Git ke server monitoring ($MONITOR_IP)..."
-export GIT_SSH_COMMAND="ssh $SSH_OPTIONS"
 
-if git push -u monitoring master 2>/dev/null; then
-    success_msg "Push Git ke server monitoring berhasil."
-else
-    # Coba dengan branch main jika master gagal
-    if git push -u monitoring main 2>/dev/null; then
-        success_msg "Push Git ke server monitoring berhasil (branch main)."
-    else
-        error_exit "Gagal melakukan push Git ke server monitoring. Periksa pesan error di atas dan pastikan repository Git di server monitoring sudah diinisialisasi dengan benar."
-    fi
+export GIT_SSH_COMMAND="ssh $SSH_OPTIONS"
+if ! git remote get-url monitoring &>/dev/null; then
+    error_exit "Remote Git 'monitoring' tidak ditemukan. Pastikan telah dikonfigurasi."
 fi
+BRANCH=$(git branch --show-current)
+
+if git push -u monitoring "$BRANCH"; then
+    success_msg "Push Git ke server monitoring berhasil (branch $BRANCH)."
+else
+    error_exit "Gagal melakukan push Git ke server monitoring. Pastikan remote 'monitoring' tersedia dan repo tujuan sudah diinisialisasi sebagai bare repository."
+fi
+
 
 success_msg "Proses backup konten statis (Git) berhasil diselesaikan."
 echo ""
