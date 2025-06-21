@@ -950,18 +950,16 @@ else
     info_msg "Cron job backup sudah ada."
 fi
 
-# 13. Otomatisasi Penuh Konfigurasi SSH ke Server Monitoring (Hanya 1x Password)
+# 13. Otomatisasi Penuh Konfigurasi SSH ke Server Monitoring (Direktori Dinamis)
 # ---------------------------------------------------------------------------------
 info_msg "Konfigurasi Kunci SSH untuk koneksi ke server monitoring ($MONITOR_USER@$WAZUH_MANAGER_IP)..."
 
 SSH_KEY_NAME="id_rsa_soc_backup"
 SSH_IDENTITY_FILE_PATH="/root/.ssh/$SSH_KEY_NAME"
 
-# Membuat direktori .ssh jika belum ada
 mkdir -p "/root/.ssh"
 chmod 700 "/root/.ssh"
 
-# Generate SSH key pair jika belum ada
 if [ ! -f "$SSH_IDENTITY_FILE_PATH" ]; then
     info_msg "Membuat SSH key pair untuk backup..."
     ssh-keygen -t rsa -b 4096 -f "$SSH_IDENTITY_FILE_PATH" -N "" -C "soc-backup@$(hostname)"
@@ -970,18 +968,10 @@ else
     info_msg "SSH key sudah ada: $SSH_IDENTITY_FILE_PATH"
 fi
 
-# Definisikan path untuk socket ControlMaster
-# Ini adalah file sementara untuk mengelola koneksi bersama
 CONTROL_PATH="/tmp/ssh_soc_control_$$"
 
 info_msg "Memulai koneksi master SSH. Anda akan diminta password untuk '$MONITOR_USER' SATU KALI."
 
-# Buat koneksi master di background. Pengguna akan memasukkan password di sini.
-# -M: Master mode
-# -S: Path ke control socket
-# -N: Jangan eksekusi perintah remote (hanya buat koneksi)
-# -f: Jalan di background
-# ControlPersist=60s: Biarkan koneksi hidup selama 60 detik setelah task terakhir selesai
 ssh -M -S "$CONTROL_PATH" -o ControlPersist=60s "$MONITOR_USER@$WAZUH_MANAGER_IP" -Nf
 if [ $? -ne 0 ]; then
     error_exit "Gagal membuat koneksi master SSH. Periksa koneksi, nama pengguna, atau password."
@@ -989,51 +979,54 @@ fi
 success_msg "Koneksi master SSH berhasil dibuat."
 
 
-# Langkah 1: Eksekusi semua persiapan di remote server menggunakan koneksi master
+# --- PERUBAHAN DINAMIS ---
+# Langkah 1: Membangun dan mengeksekusi script persiapan di remote server secara dinamis
+
 info_msg "Mempersiapkan direktori, kepemilikan, dan Git di server monitoring..."
-# Menggunakan 'heredoc' untuk mengirim blok perintah yang bersih
-ssh -S "$CONTROL_PATH" "$MONITOR_USER@$WAZUH_MANAGER_IP" <<'EOF_REMOTE'
-    # Variabel-variabel ini harus didefinisikan di dalam heredoc
-    REMOTE_PATH_TO_SETUP="/var/backup/web"
-    REMOTE_USER_TO_OWN="wazuh"
-    
-    echo "[REMOTE] Membuat direktori $REMOTE_PATH_TO_SETUP..."
-    mkdir -p "$REMOTE_PATH_TO_SETUP"
-    
-    echo "[REMOTE] Mengatur kepemilikan untuk $REMOTE_USER_TO_OWN..."
-    # Perintah ini mungkin memerlukan hak sudo di server remote
-    # dan user 'wazuh' harus memiliki izin sudo tanpa password untuk 'chown'
-    if command -v sudo &> /dev/null; then
-        sudo chown -R "$REMOTE_USER_TO_OWN:$REMOTE_USER_TO_OWN" "$REMOTE_PATH_TO_SETUP"
-    else
-        chown -R "$REMOTE_USER_TO_OWN:$REMOTE_USER_TO_OWN" "$REMOTE_PATH_TO_SETUP"
-    fi
-    
-    echo "[REMOTE] Inisialisasi Git bare repository..."
-    # Hanya inisialisasi jika direktori .git belum ada
-    if [ ! -d "$REMOTE_PATH_TO_SETUP/refs" ]; then
-        git init --bare "$REMOTE_PATH_TO_SETUP"
-    else
-        echo "[REMOTE] Git repository sudah ada."
-    fi
-    
-    echo "[REMOTE] Persiapan selesai."
-EOF_REMOTE
+
+# 'printf %q' adalah cara yang aman untuk meng-quote variabel agar dapat digunakan
+# di shell lain tanpa risiko command injection.
+REMOTE_PATH_QUOTED=$(printf '%q' "$REMOTE_GIT_BACKUP_PATH")
+REMOTE_USER_QUOTED=$(printf '%q' "$MONITOR_USER")
+
+# Membangun blok perintah sebagai satu string untuk dikirim ke remote server.
+REMOTE_SCRIPT="
+echo \"[REMOTE] Path backup yang akan disiapkan: ${REMOTE_PATH_QUOTED}\";
+echo \"[REMOTE] Membuat direktori ${REMOTE_PATH_QUOTED}...\";
+mkdir -p ${REMOTE_PATH_QUOTED};
+
+echo \"[REMOTE] Mengatur kepemilikan untuk pengguna ${REMOTE_USER_QUOTED}...\";
+if command -v sudo &> /dev/null; then
+    sudo chown -R ${REMOTE_USER_QUOTED}:${REMOTE_USER_QUOTED} ${REMOTE_PATH_QUOTED};
+else
+    chown -R ${REMOTE_USER_QUOTED}:${REMOTE_USER_QUOTED} ${REMOTE_PATH_QUOTED};
+fi;
+
+echo \"[REMOTE] Inisialisasi Git bare repository di ${REMOTE_PATH_QUOTED}...\";
+if [ ! -d \"${REMOTE_PATH_QUOTED}/refs\" ]; then
+    git init --bare ${REMOTE_PATH_QUOTED};
+else
+    echo \"[REMOTE] Git repository sudah ada.\";
+fi;
+
+echo \"[REMOTE] Persiapan selesai.\";
+"
+
+# Eksekusi blok perintah yang sudah dibangun menggunakan koneksi master
+ssh -S "$CONTROL_PATH" "$MONITOR_USER@$WAZUH_MANAGER_IP" "$REMOTE_SCRIPT"
 
 if [ $? -ne 0 ]; then
     warning_msg "Beberapa perintah persiapan di server remote mungkin gagal. Periksa output di atas."
-    # Kita tidak keluar dari skrip, karena penyalinan kunci mungkin masih bisa berhasil
 else
     success_msg "Persiapan di server monitoring berhasil diselesaikan."
 fi
+# --- AKHIR PERUBAHAN DINAMIS ---
 
 
 # Langkah 2: Salin kunci SSH menggunakan koneksi master yang sama
 info_msg "Menyalin kunci SSH publik (tanpa meminta password lagi)..."
-# -o "ControlPath=$CONTROL_PATH" : Instruksikan ssh-copy-id untuk memakai koneksi master
 ssh-copy-id -o "ControlPath=$CONTROL_PATH" -i "$SSH_IDENTITY_FILE_PATH.pub" "$MONITOR_USER@$WAZUH_MANAGER_IP"
 if [ $? -ne 0 ]; then
-    # Tutup koneksi master sebelum keluar dari error
     ssh -S "$CONTROL_PATH" -O exit "$MONITOR_USER@$WAZUH_MANAGER_IP" 2>/dev/null || true
     error_exit "Gagal menyalin kunci SSH. Otomatisasi gagal."
 fi
