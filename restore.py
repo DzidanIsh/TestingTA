@@ -131,7 +131,7 @@ def load_config():
         error_exit(f"Error membaca konfigurasi '{config_file}': {str(e)}")
     
     # Validasi kunci dasar yang selalu dibutuhkan
-    required_keys_base = ["WEB_DIR", "PASSWORD", "MONITORING_SERVER", "MONITORING_USER", "REMOTE_GIT_BACKUP_PATH", "SSH_IDENTITY_FILE"]
+    required_keys_base = ["WEB_DIR", "PASSWORD", "MONITOR_IP", "MONITOR_USER", "REMOTE_GIT_BACKUP_PATH", "SSH_IDENTITY_FILE"]
     if config.get("BACKUP_DYNAMIC", "false").lower() == "true":
         required_keys_base.extend(["REMOTE_DYNAMIC_BACKUP_PATH", "LOCAL_DYNAMIC_RESTORE_CACHE_DIR", "DYNAMIC_DIRS"])
 
