@@ -241,8 +241,8 @@ def fetch_dynamic_archives_from_remote(config, is_automated_call=False):
     """Mengambil arsip file dinamis dari server monitoring ke cache lokal."""
     info_msg("Memulai pengambilan arsip file dinamis dari server monitoring...", is_automated_call)
     
-    monitor_ip = config['MONITORING_SERVER']
-    monitor_user = config['MONITORING_USER']
+    monitor_ip = config['MONITOR_IP']
+    monitor_user = config['MONITOR_USER']
     remote_path = config['REMOTE_DYNAMIC_BACKUP_PATH'].rstrip('/') + '/'
     local_cache_dir = config['LOCAL_DYNAMIC_RESTORE_CACHE_DIR']
     ssh_identity_file = config['SSH_IDENTITY_FILE']
