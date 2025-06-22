@@ -679,16 +679,16 @@ success_msg "YARA rules berhasil diunduh dan dikonfigurasi."
 info_msg "Membuat file konfigurasi $SOC_CONFIG_DIR/config.conf..."
 
 # Inisialisasi variabel untuk pattern eradication
-DEFAULT_ERADICATION_PATTERNS='(?i)(eval\s*\(base64_decode\s*\()|\
-(?i)(passthru\s*\()|\
-(?i)(shell_exec\s*\()|\
-(?i)(system\s*\()|\
-(?i)(exec\s*\()|\
+ERADICATION_SUSPICIOUS_PATTERNS="(?i)(eval\s*\(base64_decode\s*\())|\
+(?i)(passthru\s*\())|\
+(?i)(shell_exec\s*\())|\
+(?i)(system\s*\())|\
+(?i)(exec\s*\())|\
 (?i)(preg_replace\s*\(.*\/e\s*\))|\
 (?i)(FilesMan|phpfm|P\.A\.S\.|\bWebShell\b|r57shell|c99shell)|\
-(?i)(document\.write\s*\(\s*unescape\s*\()|\
-(?i)(<iframe\s*src\s*=\s*["'\''"]javascript:)|\
-(?i)(fsockopen|pfsockopen)\s*\('
+(?i)(document\.write\s*\(\s*unescape\s*\())|\
+(?i)(<iframe\s*src\s*=\s*[\"']javascript:)|\
+(?i)(fsockopen|pfsockopen)\s*\("
 
 # 9. Membuat dan Menyesuaikan Skrip Lokal (soc-backup-dynamic)
 # -------------------------------------------------------------
