@@ -213,10 +213,12 @@ if [ ! -f /etc/apt/sources.list.d/wazuh.list ]; then
 fi
 
 # Instalasi Wazuh Agent
+# GANTI VERSI DI BAWAH INI SESUAI DENGAN VERSI WAZUH MANAGER ANDA
+WAZUH_AGENT_VERSION="4.7.5-1"
 if ! command -v /var/ossec/bin/wazuh-control &> /dev/null; then
-    info_msg "Menginstal Wazuh Agent..."
-    apt-get install -y wazuh-agent || error_exit "Gagal menginstal Wazuh Agent."
-    success_msg "Wazuh Agent berhasil diinstal."
+    info_msg "Menginstal Wazuh Agent versi spesifik: $WAZUH_AGENT_VERSION..."
+    apt-get install -y wazuh-agent=$WAZUH_AGENT_VERSION || error_exit "Gagal menginstal Wazuh Agent versi $WAZUH_AGENT_VERSION. Pastikan versi tersedia di repository."
+    success_msg "Wazuh Agent versi $WAZUH_AGENT_VERSION berhasil diinstal."
 else
     info_msg "Wazuh Agent sudah terinstal."
 fi
