@@ -321,17 +321,31 @@ def restore_dynamic_files_from_cache(config, is_automated_call=False):
         info_msg(f"Merestore '{dir_name_in_config}' dari arsip: '{os.path.basename(latest_archive)}'", is_automated_call)
         
         try:
-            if os.path.lexists(target_path_for_dir):
-                info_msg(f"Menghapus '{target_path_for_dir}' yang ada sebelum ekstraksi...", is_automated_call)
-                if os.path.isdir(target_path_for_dir) and not os.path.islink(target_path_for_dir):
-                    shutil.rmtree(target_path_for_dir)
-                else:
-                    os.unlink(target_path_for_dir)
+            # =================================================================
+            # PERUBAHAN DIMULAI DI SINI
+            # =================================================================
+            # Logika baru: Daripada menghapus folder target, kita bersihkan isinya.
+            if os.path.isdir(target_path_for_dir):
+                info_msg(f"Membersihkan isi direktori '{target_path_for_dir}' sebelum ekstraksi...", is_automated_call)
+                for item in os.listdir(target_path_for_dir):
+                    item_path = os.path.join(target_path_for_dir, item)
+                    try:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.unlink(item_path)
+                    except Exception as e_clean:
+                        warning_msg(f"Gagal menghapus item lama '{item_path}': {e_clean}", is_automated_call)
             
-            # Pastikan parent directory ada sebelum ekstraksi
-            os.makedirs(os.path.dirname(target_path_for_dir), exist_ok=True)
+            # Pastikan direktori target ada. Jika tidak ada, buat baru.
+            # Ini juga berguna jika direktori memang belum pernah ada sebelumnya.
+            os.makedirs(target_path_for_dir, exist_ok=True)
+            # =================================================================
+            # PERUBAHAN SELESAI DI SINI
+            # =================================================================
 
             with tarfile.open(latest_archive, "r:gz") as tar:
+                # Mengekstrak konten ke direktori web utama. Tarball harus memiliki path relatif yang benar.
                 tar.extractall(path=web_dir)
             success_msg(f"Berhasil merestore '{dir_name_in_config}'.", is_automated_call)
 
@@ -339,11 +353,15 @@ def restore_dynamic_files_from_cache(config, is_automated_call=False):
             web_server_group = config.get('WEB_SERVER_GROUP')
             if web_server_user and web_server_group and os.path.exists(target_path_for_dir):
                 try:
+                    # Chown pada direktori target itu sendiri
+                    shutil.chown(target_path_for_dir, user=web_server_user, group=web_server_group)
+                    # Chown pada semua isi di dalamnya
                     for dirpath, dirnames, filenames in os.walk(target_path_for_dir):
-                        shutil.chown(dirpath, user=web_server_user, group=web_server_group)
-                        for filename in filenames:
-                            shutil.chown(os.path.join(dirpath, filename), user=web_server_user, group=web_server_group)
-                    info_msg(f"Kepemilikan untuk '{target_path_for_dir}' diatur ke {web_server_user}:{web_server_group}", is_automated_call)
+                        for d in dirnames:
+                            shutil.chown(os.path.join(dirpath, d), user=web_server_user, group=web_server_group)
+                        for f in filenames:
+                            shutil.chown(os.path.join(dirpath, f), user=web_server_user, group=web_server_group)
+                    info_msg(f"Kepemilikan untuk '{target_path_for_dir}' dan isinya diatur ke {web_server_user}:{web_server_group}", is_automated_call)
                 except Exception as e_chown:
                     warning_msg(f"Gagal mengatur kepemilikan untuk '{target_path_for_dir}': {e_chown}", is_automated_call)
             
@@ -356,7 +374,6 @@ def restore_dynamic_files_from_cache(config, is_automated_call=False):
     else:
         warning_msg("Beberapa file/direktori dinamis mungkin gagal direstore.", is_automated_call)
     return all_restored_successfully
-
 
 def main():
     parser = argparse.ArgumentParser(description="SOC Recovery Phase Interactive Restore Tool - NIST 800-61")
